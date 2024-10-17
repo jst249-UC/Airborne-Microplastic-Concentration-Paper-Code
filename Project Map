@@ -1,0 +1,135 @@
+import numpy as np  
+import matplotlib.pyplot as plt 
+import cartopy.crs as ccrs
+import pandas as pd
+import cartopy.feature as cfeature
+from matplotlib.colors import LogNorm
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import BoundaryNorm
+
+
+df = pd.read_excel('/Users/jacksw/Library/CloudStorage/OneDrive-UniversityofCanterbury/2024/PHYS381/Project/Test for Map.xlsx')
+df.to_csv('file.csv', index=False)
+
+# Extract coordinates and concentration values
+lats = df['Lat'].values
+lons = df['Lon'].values
+concentrations = df['AvgConcentration'].values
+# Create a figure and set up a global projection
+fig = plt.figure()
+ax = plt.axes(projection=ccrs.PlateCarree())  # For the default square map
+
+# Add map features (land, coastlines, etc.)
+ax.add_feature(cfeature.COASTLINE)
+ax.add_feature(cfeature.LAND, color='lightgrey')
+#ax.add_feature(cfeature.BORDERS, linestyle='-', edgecolor='black')
+gl = ax.gridlines(draw_labels=True)
+
+# Code to expand map to a specific region
+# Coords are in Lonmin, lonmax, latmin, latmax
+ax.set_extent([40, 150, -11, 60], crs=ccrs.PlateCarree()) #Asia
+#ax.set_extent([-10, 40, 35, 70], crs=ccrs.PlateCarree()) #Europe
+#ax.set_global()
+ 
+
+# Removing gridlines and gridlabels
+gl.xlines = False  # Disable x-axis gridlines
+gl.ylines = False 
+gl.left_labels = False
+gl.right_labels = False
+gl.top_labels = False
+gl.bottom_labels = False
+
+map_name = 'GnYlRd'
+colors = ["green", "yellow", "red"]  # Green for low, Red for high
+n_bins = 6  # Increase this for smoother transitions
+cmap = LinearSegmentedColormap.from_list(map_name, colors, N=n_bins)
+
+# Define your color boundaries at powers of 10
+bounds = [10**(-2), 10**(-1), 10**0, 10**1, 10**2, 10**3, 10**4]
+
+# Define a colormap (e.g., 'viridis') and normalize between the defined boundaries
+#cmap = plt.get_cmap('viridis', len(bounds) - 1)  # colormap with the number of intervals
+norm = BoundaryNorm(boundaries=bounds, ncolors=cmap.N, clip=True)
+#
+
+# Jitter to make overlappin points more obvious
+jitter = 1
+np.random.seed(42)
+jit_lat = lats +np.random.uniform(-jitter, jitter, size = len(lats))
+jit_lon = lons + np.random.uniform(-jitter, jitter, size = len(lons))
+
+# Create the scatter plot on the map
+sc = ax.scatter(jit_lon, jit_lat, c=concentrations, cmap=cmap, norm=norm, s=50, edgecolor='k', transform=ccrs.PlateCarree())
+
+# Add a colorbar to the map
+cbar = plt.colorbar(sc, ax=ax, orientation='horizontal', label='Log Scale of Microplastic Concentration (MP/$m^3$)', pad=0.02, shrink=0.92)
+
+# Set colorbar ticks and labels to match the defined bounds
+cbar.set_ticks(bounds)
+cbar.set_ticklabels([r'$10^{-2}$', r'$10^{-1}$', r'$10^{0}$', r'$10^{1}$', r'$10^{2}$', r'$10^{3}$', r'$10^{4}$'])
+
+#plt.subplots_adjust(bottom=0.1, top=0.2)  # Adjust this as necessary for your plot
+
+
+# Set the title
+#ax.set_title('Europe Heatmap of Microplastic Concentrations')
+
+# Show the map
+plt.tight_layout()
+plt.savefig('/Users/jacksw/Library/CloudStorage/OneDrive-UniversityofCanterbury/2024/PHYS381/Project/asiamap.svg', format='svg', dpi=1200)
+#plt.show()
+
+
+# Calculating means
+[-15, 40, 35, 75]
+
+
+europe_mask = (lons >= -15) & (lons <=25) & (lats >= 35) & (lats <= 75)
+asia_mask = (lons >= 40) & (lons <= 150) & (lats >= -11) & (lats <= 60)
+other_mask = ~europe_mask & ~asia_mask
+
+europe_vals = concentrations[europe_mask]
+asia_vals = concentrations[asia_mask]
+other_vals = concentrations[other_mask]
+
+# Calculate medians
+europe_median = np.median(europe_vals)
+asia_median = np.median(asia_vals)
+other_median = np.median(other_vals)
+global_median = np.median(concentrations)
+
+# Median Absolute Deviation (MAD) as a measure of variability
+europe_mad = np.median(np.abs(europe_vals - europe_median)) / np.sqrt(len(europe_vals))
+asia_mad = np.median(np.abs(asia_vals - asia_median)) / np.sqrt(len(asia_vals))
+other_mad = np.median(np.abs(other_vals - other_median)) / np.sqrt(len(other_vals))
+glob_mad = np.median(np.abs(concentrations - global_median)) / np.sqrt(len(concentrations))
+
+# Print the medians and MAD
+print("Europe median = ", europe_median, '+/-', europe_mad, " MP/$m^3$")
+print("Asia median = ", asia_median, '+/-', asia_mad, " MP/$m^3$")
+print("Other Regions median = ", other_median, '+/-', other_mad, " MP/$m^3$")
+print("Global median = ", global_median, '+/-', glob_mad, " MP/$m^3$")
+
+# Update the regions, median, and MAD arrays
+region = ['Other Regions', 'Global', 'Europe', 'Asia']
+region_vals = [other_vals, concentrations, europe_vals, asia_vals]
+region_median = [other_median, global_median, europe_median, asia_median]
+errors = [other_mad, glob_mad, europe_mad, asia_mad]
+
+# Plotting
+plt.figure(figsize=(10, 6))
+plt.barh(region, region_median, xerr=errors, capsize=10, color='grey')
+
+# Add the number of data points next to the bars
+for i, num_points in enumerate(region_vals):
+    plt.text(region_median[i] + errors[i] + 0.1, i, f'N={len(region_vals[i])}', va='center', fontsize=10, color='k')
+
+# Labeling
+plt.xlabel('Median Concentration (MP/$m^3$)')
+plt.xlim(0, 13)
+
+# Display the plot
+plt.tight_layout()
+plt.savefig('/Users/jacksw/Library/CloudStorage/OneDrive-UniversityofCanterbury/2024/PHYS381/Project/avgbar.svg')
+plt.show()
